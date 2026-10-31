@@ -12,20 +12,11 @@
   <img src="https://img.shields.io/badge/ONNX_Runtime-005CED?style=for-the-badge&logo=onnx&logoColor=white" alt="ONNX Runtime">
 </p>
 
-<table align="center">
-  <tr>
-    <td align="center" valign="top" width="320">
-      <img src="preview/sonora-home.png" width="320" alt="Sonora main window">
-      <br>
-      <sub><b>Main window</b> — write, generate, save</sub>
-    </td>
-    <td align="center" valign="top" width="320">
-      <img src="preview/sonora-history.png" width="320" alt="Sonora History panel">
-      <br>
-      <sub><b>History</b> — search, replay, re-use</sub>
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <img src="preview/sonora_home.png" width="640" alt="Sonora main window">
+  <br>
+  <sub><b>Main window</b></sub>
+</p>
 
 Sonora is a native, **fully offline** text-to-speech desktop app. Type or drop in text, pick one of 55 voices, and generate speech locally — powered by the [Kokoro-82M](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX) model running **in-process** via ONNX Runtime. No Python, no server, no network.
 

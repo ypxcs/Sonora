@@ -14,7 +14,7 @@ function GenerateButton(props: Props) {
       onClick={props.onClick}
       disabled={props.disabled || props.loading}
       title={`Generate (${formatShortcut("↵")})`}
-      class="flex h-7 items-center gap-1.5 rounded-md bg-accent px-3 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+      class="flex h-8 w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-accent px-3 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
     >
       {props.loading ? (
         <svg

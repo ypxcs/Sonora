@@ -1,4 +1,13 @@
-import { createSignal, createEffect, createMemo, For } from "solid-js";
+import {
+  createSignal,
+  createEffect,
+  createMemo,
+  createUniqueId,
+  For,
+  Show,
+  type JSX,
+} from "solid-js";
+import { Portal } from "solid-js/web";
 import { IconChevronDown } from "./icons";
 
 function groupPrefix(v: string): string {
@@ -20,30 +29,23 @@ interface Props {
   voices: string[];
   value: string;
   onChange: (v: string) => void;
+  /** Hide the built-in label when a surrounding Field already provides one. */
+  label?: string | null;
+  /** Offer a "None (first)" choice that reports an empty string. */
+  allowNone?: boolean;
 }
 
 function VoiceSelector(props: Props) {
   const [open, setOpen] = createSignal(false);
   const [query, setQuery] = createSignal("");
   const [activeIndex, setActiveIndex] = createSignal(0);
+  const [menuStyle, setMenuStyle] = createSignal<JSX.CSSProperties>({});
+  const listId = createUniqueId();
   let ref: HTMLDivElement | undefined;
+  let menuRef: HTMLDivElement | undefined;
   let inputRef: HTMLInputElement | undefined;
 
-  createEffect(() => {
-    if (open()) {
-      inputRef?.focus();
-      const handler = (e: FocusEvent) => {
-        if (ref && !ref.contains(e.relatedTarget as Node)) {
-          setOpen(false);
-          setQuery("");
-        }
-      };
-      ref!.addEventListener("focusout", handler);
-      return () => ref!.removeEventListener("focusout", handler);
-    } else {
-      setQuery("");
-    }
-  });
+  const noneVisible = () => !!props.allowNone && !query().trim();
 
   // Group matches for display, tracking each group's offset so the active
   // keyboard index maps onto the flattened option list.
@@ -66,32 +68,113 @@ function VoiceSelector(props: Props) {
     });
   });
 
-  const flat = createMemo(() => grouped().flatMap((g) => g.items));
+  // None (when offered) sits before the grouped voices and shares the same
+  // keyboard cursor.
+  const flat = createMemo(() => {
+    const voices = grouped().flatMap((g) => g.items);
+    return noneVisible() ? ["", ...voices] : voices;
+  });
 
+  const offset = () => (noneVisible() ? 1 : 0);
+
+  function initialIndex() {
+    const i = flat().indexOf(props.value);
+    return i >= 0 ? i : 0;
+  }
+
+  /** Fixed positioning keeps the menu above the Settings sheet's scroll pane. */
+  function positionMenu() {
+    const el = ref;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const gap = 4;
+    const margin = 12;
+    const below = window.innerHeight - r.bottom - gap - margin;
+    const above = r.top - gap - margin;
+    const openUp = below < 200 && above > below;
+    setMenuStyle({
+      left: `${r.left}px`,
+      width: `${r.width}px`,
+      top: openUp ? undefined : `${r.bottom + gap}px`,
+      bottom: openUp ? `${window.innerHeight - r.top + gap}px` : undefined,
+      "max-height": `${Math.max(140, Math.min(288, openUp ? above : below))}px`,
+    });
+  }
+
+  function openMenu() {
+    positionMenu();
+    setOpen(true);
+  }
+
+  function closeMenu() {
+    setOpen(false);
+    setQuery("");
+  }
+
+  createEffect(() => {
+    if (!open()) {
+      setQuery("");
+      return;
+    }
+    setActiveIndex(initialIndex());
+    inputRef?.focus();
+    positionMenu();
+
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (ref?.contains(target) || menuRef?.contains(target)) return;
+      closeMenu();
+    };
+    const onFocusIn = (e: FocusEvent) => {
+      const target = e.target as Node;
+      if (ref?.contains(target) || menuRef?.contains(target)) return;
+      closeMenu();
+    };
+    const reposition = () => positionMenu();
+
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("focusin", onFocusIn);
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("focusin", onFocusIn);
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
+  });
+
+  // Reset the keyboard cursor when the search changes.
   createEffect(() => {
     query();
     setActiveIndex(0);
   });
 
+  // Keep the highlighted option visible during keyboard navigation.
   createEffect(() => {
-    if (open()) setActiveIndex(0);
+    if (!open()) return;
+    const idx = activeIndex();
+    menuRef
+      ?.querySelector<HTMLElement>(`[data-index="${idx}"]`)
+      ?.scrollIntoView({ block: "nearest" });
   });
 
   function select(v: string) {
     props.onChange(v);
-    setOpen(false);
-    setQuery("");
+    closeMenu();
   }
 
   function handleKeyDown(e: KeyboardEvent) {
     if (e.key === "Escape") {
-      setOpen(false);
+      // Keep Escape from also closing the Settings sheet.
+      e.stopPropagation();
+      closeMenu();
       return;
     }
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       if (!open()) {
-        setOpen(true);
+        openMenu();
         return;
       }
       const options = flat();
@@ -107,88 +190,133 @@ function VoiceSelector(props: Props) {
     }
     if (e.key === "Enter") {
       if (!open()) {
-        setOpen(true);
+        openMenu();
         return;
       }
       e.preventDefault();
       const v = flat()[activeIndex()];
-      if (v) select(v);
+      if (v !== undefined) select(v);
     }
   }
 
   return (
-    <div class="flex items-center gap-2">
-      <label class="shrink-0 text-[11px] font-medium text-content-secondary">
-        Voice
-      </label>
+    <div class="flex w-full flex-col gap-1.5">
+      <Show when={props.label !== null}>
+        <label class="text-[11px] font-medium text-content-secondary">
+          {props.label ?? "Voice"}
+        </label>
+      </Show>
       <div
         ref={ref}
         tabIndex={0}
+        role="combobox"
+        aria-haspopup="listbox"
+        aria-expanded={open()}
+        aria-controls={listId}
         onKeyDown={handleKeyDown}
-        class="relative h-7 min-w-[170px] cursor-pointer"
+        class="relative w-full cursor-pointer"
       >
         <div
-          onClick={() => setOpen(!open())}
-          class="flex h-full items-center justify-between gap-3 rounded-md border border-[var(--control-border)] bg-[var(--control)] px-2 text-[13px]"
+          onClick={() => (open() ? closeMenu() : openMenu())}
+          class="flex h-8 items-center justify-between gap-2 rounded-md border border-[var(--control-border)] bg-[var(--control)] px-2.5 text-[13px]"
         >
-          <span class={props.value ? "text-content" : "text-content-tertiary"}>
-            {props.value || `Select a voice (${props.voices.length})...`}
+          <span
+            class={`min-w-0 flex-1 truncate ${
+              props.value || props.allowNone
+                ? "text-content"
+                : "text-content-tertiary"
+            }`}
+          >
+            {props.value ||
+              (props.allowNone
+                ? "None (first)"
+                : `Select a voice (${props.voices.length})...`)}
           </span>
           <IconChevronDown
-            class={`h-3.5 w-3.5 text-content-tertiary transition-transform ${open() ? "rotate-180" : ""}`}
+            class={`h-3.5 w-3.5 shrink-0 text-content-tertiary transition-transform ${open() ? "rotate-180" : ""}`}
           />
         </div>
-        {open() && (
-          <ul
-            role="listbox"
-            class="absolute bottom-full left-0 right-0 z-10 mb-1 max-h-56 overflow-y-auto rounded-md border border-separator bg-surface-elevated py-1 shadow-[0_12px_32px_rgba(0,0,0,0.35)]"
-          >
-            <li class="sticky -top-px border-b border-separator bg-surface-elevated px-1">
-              <input
-                ref={inputRef}
-                value={query()}
-                onInput={(e) => setQuery(e.currentTarget.value)}
-                placeholder="Search voices..."
-                class="w-full rounded border border-transparent bg-transparent px-1 py-1.5 text-[13px] text-content placeholder:text-content-tertiary focus:border-[var(--focus-border)] focus:outline-none"
-              />
-            </li>
-            {grouped().length === 0 ? (
-              <li class="px-2 py-1.5 text-[13px] text-content-tertiary">
-                No matches
-              </li>
-            ) : (
-              <For each={grouped()}>
-                {(g) => (
-                  <>
-                    {g.group && (
-                      <li class="sticky top-[33px] border-b border-separator bg-surface px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-content-tertiary">
-                        {g.group}
-                      </li>
-                    )}
-                    <For each={g.items}>
-                      {(v, i) => {
-                        const active = () => g.start + i() === activeIndex();
-                        return (
-                          <li
-                            role="option"
-                            aria-selected={v === props.value}
-                            onMouseEnter={() => setActiveIndex(g.start + i())}
-                            onClick={() => select(v)}
-                            class={`cursor-pointer border-b border-separator px-2 py-1.5 text-[13px] last:border-b-0 ${
-                              active() ? "bg-[var(--control-active)]" : "hover:bg-[var(--control-hover)]"
-                            } ${v === props.value ? "text-accent" : "text-content"}`}
-                          >
-                            {v}
+        <Show when={open()}>
+          <Portal>
+            <div
+              ref={menuRef}
+              style={menuStyle()}
+              onKeyDown={handleKeyDown}
+              class="fixed z-[60] flex flex-col overflow-hidden rounded-lg border border-separator bg-surface-elevated shadow-[0_12px_32px_rgba(0,0,0,0.35)]"
+            >
+              <div class="shrink-0 border-b border-separator p-1.5">
+                <input
+                  ref={inputRef}
+                  value={query()}
+                  onInput={(e) => setQuery(e.currentTarget.value)}
+                  placeholder="Search voices..."
+                  class="w-full rounded-md border border-[var(--control-border)] bg-[var(--editor)] px-2 py-1.5 text-[13px] text-content placeholder:text-content-tertiary focus:border-[var(--focus-border)] focus:outline-none"
+                />
+              </div>
+              <ul
+                id={listId}
+                role="listbox"
+                class="min-h-0 flex-1 overflow-y-auto py-1"
+              >
+                <Show when={noneVisible()}>
+                  <li
+                    role="option"
+                    aria-selected={props.value === ""}
+                    data-index={0}
+                    onMouseEnter={() => setActiveIndex(0)}
+                    onClick={() => select("")}
+                    class={`cursor-pointer border-b border-separator px-2.5 py-1.5 text-[13px] ${
+                      activeIndex() === 0
+                        ? "bg-[var(--control-active)]"
+                        : "hover:bg-[var(--control-hover)]"
+                    } ${props.value === "" ? "text-accent" : "text-content"}`}
+                  >
+                    None (first)
+                  </li>
+                </Show>
+                {grouped().length === 0 && !noneVisible() ? (
+                  <li class="px-2.5 py-1.5 text-[13px] text-content-tertiary">
+                    No matches
+                  </li>
+                ) : (
+                  <For each={grouped()}>
+                    {(g) => (
+                      <>
+                        {g.group && (
+                          <li class="sticky top-0 z-10 border-b border-separator bg-surface-elevated px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-content-tertiary">
+                            {g.group}
                           </li>
-                        );
-                      }}
-                    </For>
-                  </>
+                        )}
+                        <For each={g.items}>
+                          {(v, i) => {
+                            const index = () => offset() + g.start + i();
+                            const active = () => index() === activeIndex();
+                            return (
+                              <li
+                                role="option"
+                                aria-selected={v === props.value}
+                                data-index={index()}
+                                onMouseEnter={() => setActiveIndex(index())}
+                                onClick={() => select(v)}
+                                class={`cursor-pointer border-b border-separator px-2.5 py-1.5 text-[13px] last:border-b-0 ${
+                                  active()
+                                    ? "bg-[var(--control-active)]"
+                                    : "hover:bg-[var(--control-hover)]"
+                                } ${v === props.value ? "text-accent" : "text-content"}`}
+                              >
+                                {v}
+                              </li>
+                            );
+                          }}
+                        </For>
+                      </>
+                    )}
+                  </For>
                 )}
-              </For>
-            )}
-          </ul>
-        )}
+              </ul>
+            </div>
+          </Portal>
+        </Show>
       </div>
     </div>
   );

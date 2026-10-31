@@ -11,4 +11,3 @@ src/assets
 
 # TTS model files (downloaded via scripts/download-models.sh)
 src-tauri/resources/
-

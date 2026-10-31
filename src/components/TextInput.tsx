@@ -1,5 +1,6 @@
 import { createSignal, createEffect } from "solid-js";
 import { MAX_TEXT_CHARS } from "../lib/constants";
+import { formatShortcut } from "../lib/platform";
 
 interface Props {
   value: string;
@@ -55,8 +56,12 @@ function TextInput(props: Props) {
     reader.readAsText(file);
   }
 
+  const atLimit = () => props.value.length >= MAX_TEXT_CHARS;
+
   return (
-    <div class="relative flex flex-1 flex-col">
+    // Fills the left column up to 280px: 400 characters never need more, and
+    // the counter lives in the card's footer so it reads as part of the editor.
+    <div class="relative flex min-h-[160px] max-h-[280px] flex-1 flex-col rounded-lg border border-separator bg-[var(--editor)] transition-colors focus-within:border-[var(--focus-border)]">
       <textarea
         ref={ref}
         value={props.value}
@@ -67,11 +72,22 @@ function TextInput(props: Props) {
         onDrop={handleDrop}
         placeholder="Enter text to speak... (or drop a .txt file)"
         maxLength={MAX_TEXT_CHARS}
-        class={
-          "w-full flex-1 resize-none rounded-lg border bg-[var(--editor)] p-4 text-[13px] leading-relaxed text-content placeholder:text-content-tertiary focus:border-[var(--focus-border)] focus:outline-none " +
-          (dragging() ? "border-[var(--focus-border)]" : "border-separator")
-        }
+        class="min-h-0 w-full flex-1 resize-none overflow-y-auto bg-transparent p-3.5 text-[13px] leading-relaxed text-content placeholder:text-content-tertiary focus:outline-none"
       />
+      <div class="flex shrink-0 items-center justify-between gap-3 border-t border-separator px-3 py-1.5 text-[11px]">
+        <span class="truncate text-content-tertiary">
+          {dragging()
+            ? "Drop .txt to load"
+            : `Drop a .txt or press ${formatShortcut("↵")} to generate`}
+        </span>
+        <span
+          class={`shrink-0 tabular-nums ${
+            atLimit() ? "text-danger" : "text-content-tertiary"
+          }`}
+        >
+          {props.value.length}/{MAX_TEXT_CHARS}
+        </span>
+      </div>
       {dragging() && (
         <div class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg border-2 border-dashed border-[var(--focus-border)] bg-[var(--surface-translucent)] backdrop-blur-sm">
           <span class="text-[13px] font-medium text-content-secondary">

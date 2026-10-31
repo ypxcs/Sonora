@@ -1,10 +1,12 @@
 import { Show, type JSX } from "solid-js";
-import { isMacOS } from "../lib/platform";
-import { IconHistory, IconSettings } from "./icons";
+import { formatShortcut, isMacOS } from "../lib/platform";
+import { IconHistory, IconNew, IconSettings } from "./icons";
 
 interface Props {
   historyActive: boolean;
   settingsActive: boolean;
+  canNew: boolean;
+  onNew: () => void;
   onOpenHistory: () => void;
   onOpenSettings: () => void;
 }
@@ -51,6 +53,13 @@ function Toolbar(props: Props) {
       </Show>
       {/* Symmetric flex-1 zones keep the title centered when it's shown. */}
       <div class="flex flex-1 items-center justify-end gap-2 pr-3">
+        <ToolbarButton
+          label={`New (${formatShortcut("N")})`}
+          disabled={!props.canNew}
+          onClick={props.onNew}
+        >
+          <IconNew class="h-4 w-4" />
+        </ToolbarButton>
         <ToolbarButton
           label="History"
           active={props.historyActive}

@@ -2,7 +2,7 @@ import { createSignal, onMount, onCleanup, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import Toolbar from "./components/Toolbar";
 import TextInput from "./components/TextInput";
-import ControlBar from "./components/ControlBar";
+import ControlRail from "./components/ControlRail";
 import AudioPlayer from "./components/AudioPlayer";
 import SaveButton from "./components/SaveButton";
 import HistoryPanel from "./components/HistoryPanel";
@@ -10,8 +10,12 @@ import SettingsPanel from "./components/SettingsPanel";
 import Sheet from "./components/Sheet";
 import SlideOver from "./components/SlideOver";
 import { toWavBytes, createWavUrl } from "./lib/audio";
-import { MAX_TEXT_CHARS } from "./lib/constants";
-import type { SynthSaveResult, SynthResult, HistoryEntry, Settings } from "./lib/types";
+import type {
+  SynthSaveResult,
+  SynthResult,
+  HistoryEntry,
+  Settings,
+} from "./lib/types";
 
 type Overlay = "none" | "history" | "settings";
 
@@ -194,13 +198,17 @@ function App() {
       <Toolbar
         historyActive={overlay() === "history"}
         settingsActive={overlay() === "settings"}
+        canNew={canNew()}
+        onNew={handleNewWorkspace}
         onOpenHistory={() => openOverlay("history")}
         onOpenSettings={() => openOverlay("settings")}
       />
 
       <Show when={error()}>
         <div class="flex items-start justify-between gap-3 bg-[var(--danger-bg)] px-4 py-2">
-          <p class="min-w-0 flex-1 break-words text-[12px] text-danger">{error()}</p>
+          <p class="min-w-0 flex-1 break-words text-[12px] text-danger">
+            {error()}
+          </p>
           <button
             type="button"
             onClick={() => setError(null)}
@@ -213,43 +221,38 @@ function App() {
         </div>
       </Show>
 
-      <main class="flex min-h-0 flex-1 flex-col px-5 pt-4 pb-3">
-        <TextInput
-          value={text()}
-          onChange={setText}
-          onSubmit={handleGenerate}
-          refocusKey={refocusKey()}
+      <main class="flex min-h-0 flex-1 gap-5 px-5 pt-4 pb-3">
+        <div class="flex min-w-0 flex-1 flex-col gap-3">
+          <TextInput
+            value={text()}
+            onChange={setText}
+            onSubmit={handleGenerate}
+            refocusKey={refocusKey()}
+          />
+
+          <div class="mt-auto flex shrink-0 items-center gap-2 rounded-full border border-separator bg-[var(--control)] py-1.5 pl-1.5 pr-2">
+            <AudioPlayer src={audioUrl()} />
+            <SaveButton wavBytes={wavBytes()} compact />
+          </div>
+        </div>
+
+        <ControlRail
+          voices={voices()}
+          voice={selectedVoice()}
+          onVoiceChange={handleVoiceChange}
+          speed={speed()}
+          onSpeedChange={handleSpeedChange}
+          onGenerate={handleGenerate}
+          loading={loading()}
+          canGenerate={text().trim().length > 0 && selectedVoice().length > 0}
         />
       </main>
 
-      <Show when={audioUrl()}>
-        <div class="flex shrink-0 items-center justify-between gap-4 border-t border-separator px-4 py-2.5">
-          <div class="min-w-0 flex-1">
-            <AudioPlayer src={audioUrl()!} />
-          </div>
-          <SaveButton wavBytes={wavBytes()!} />
-        </div>
-      </Show>
-
-      <ControlBar
-        voices={voices()}
-        voice={selectedVoice()}
-        onVoiceChange={handleVoiceChange}
-        speed={speed()}
-        onSpeedChange={handleSpeedChange}
-        length={text().length}
-        maxLength={MAX_TEXT_CHARS}
-        canClear={text().length > 0}
-        onClear={() => setText("")}
-        canNew={canNew()}
-        onNew={handleNewWorkspace}
-        onGenerate={handleGenerate}
-        loading={loading()}
-        canGenerate={text().trim().length > 0 && selectedVoice().length > 0}
-      />
-
       <Show when={overlay() === "history"}>
-        <SlideOver title={`History (${history().length})`} onClose={closeOverlay}>
+        <SlideOver
+          title={`History (${history().length})`}
+          onClose={closeOverlay}
+        >
           <HistoryPanel
             entries={history()}
             onSelect={handleHistorySelect}
@@ -261,12 +264,16 @@ function App() {
       </Show>
 
       <Show when={overlay() === "settings"}>
-        <Sheet title="Settings" onClose={closeOverlay}>
+        <Sheet
+          title="Settings"
+          onClose={closeOverlay}
+          widthClass="w-[620px]"
+          bodyClass="flex min-h-0 flex-1 overflow-hidden p-0"
+        >
           <SettingsPanel
             voices={voices()}
             settings={settings()}
             onSettingsChange={handleSettingsChange}
-            onClose={closeOverlay}
             onError={setError}
           />
         </Sheet>

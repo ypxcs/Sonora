@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Sonora",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.ymac.sonora",
   "build": {
     "beforeDevCommand": "bun run dev",
@@ -14,9 +14,9 @@
       {
         "title": "Sonora",
         "width": 820,
-        "height": 640,
-        "minWidth": 720,
-        "minHeight": 480,
+        "height": 410,
+        "resizable": false,
+        "maximizable": false,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "acceptFirstMouse": true,
@@ -38,9 +38,6 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [
-      "resources/model.onnx",
-      "resources/voices/*"
-    ]
+    "resources": ["resources/model.onnx", "resources/voices/*"]
   }
 }

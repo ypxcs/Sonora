@@ -7,6 +7,11 @@ pub struct Settings {
     pub default_speed: f32,
     pub audio_format: String,
     pub default_directory: Option<String>,
+    /// Parent directory of the most recent successful save. Backend-owned:
+    /// the frontend round-trips it untouched, and it seeds the save dialog
+    /// whenever `default_directory` is unset.
+    #[serde(default)]
+    pub last_save_directory: Option<String>,
 }
 
 impl Default for Settings {
@@ -16,6 +21,7 @@ impl Default for Settings {
             default_speed: 1.0,
             audio_format: "wav".into(),
             default_directory: None,
+            last_save_directory: None,
         }
     }
 }

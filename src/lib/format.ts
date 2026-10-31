@@ -21,3 +21,13 @@ export function relativeTime(ts: number): string {
   if (diff < 2592000) return `${Math.floor(diff / 86400)}d ago`;
   return new Date(ts * 1000).toLocaleDateString();
 }
+
+/** Media timestamp as `m:ss` (or `h:mm:ss` past an hour), e.g. `3:45`. */
+export function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
+  const total = Math.floor(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}

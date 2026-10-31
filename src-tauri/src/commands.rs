@@ -1,8 +1,8 @@
 use base64::Engine;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::State;
+use tauri::{Manager, State};
 
 use crate::settings::Settings;
 use crate::AppState;
@@ -24,6 +24,13 @@ pub struct SynthSaveResult {
     pub entry: HistoryEntry,
 }
 
+/// App metadata for the About pane.
+#[derive(Debug, Serialize)]
+pub struct AppInfo {
+    pub version: String,
+    pub data_dir: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HistoryEntry {
     pub id: String,
@@ -42,9 +49,48 @@ pub fn get_settings(state: State<'_, AppState>) -> Result<Settings, String> {
     Ok(Settings::load(&state.settings_path))
 }
 
+/// App metadata for the About pane: packaged version and the app data
+/// directory (where `settings.json` and `history/` live).
 #[tauri::command]
-pub fn save_settings(state: State<'_, AppState>, settings: Settings) -> Result<(), String> {
+pub fn get_app_info(app: tauri::AppHandle) -> Result<AppInfo, String> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Data dir unavailable: {e}"))?;
+    Ok(AppInfo {
+        version: app.package_info().version.to_string(),
+        data_dir: data_dir.to_string_lossy().to_string(),
+    })
+}
+
+#[tauri::command]
+pub fn save_settings(
+    state: State<'_, AppState>,
+    mut settings: Settings,
+) -> Result<(), String> {
+    // `last_save_directory` is backend-owned (updated by the save dialog); the
+    // frontend only round-trips it, so keep whatever is on disk.
+    settings.last_save_directory = Settings::load(&state.settings_path).last_save_directory;
     settings.save(&state.settings_path)
+}
+
+/// The save location Settings displays: the configured default directory,
+/// else the last directory saved to, else the home directory. Reports what
+/// is *configured* even if that folder is gone, so a stale path stays
+/// visible for the user to fix.
+#[tauri::command]
+pub fn get_save_directory(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, String> {
+    let settings = Settings::load(&state.settings_path);
+    let dir = settings
+        .default_directory
+        .clone()
+        .or(settings.last_save_directory.clone())
+        .map(PathBuf::from)
+        .or_else(|| app.path().home_dir().ok());
+    Ok(dir.map(|p| p.to_string_lossy().to_string()))
 }
 
 const MAX_TEXT_LENGTH: usize = 400;
@@ -212,6 +258,17 @@ pub async fn save_audio(
     write_with_dialog(&app, &state, &data, &default_name)
 }
 
+/// Directory the save dialog opens in: the configured default directory,
+/// else the last directory actually saved to, else the user's home. Stale
+/// paths are skipped so the dialog never starts in a deleted folder.
+fn dialog_start_dir(app: &tauri::AppHandle, settings: &Settings) -> Option<PathBuf> {
+    let existing =
+        |dir: &Option<String>| dir.as_deref().map(PathBuf::from).filter(|p| p.exists());
+    existing(&settings.default_directory)
+        .or_else(|| existing(&settings.last_save_directory))
+        .or_else(|| app.path().home_dir().ok())
+}
+
 /// Prompt for a save location (honouring the configured default directory) and
 /// write `data` there. Shared by `save_audio` and `save_history_audio`.
 fn write_with_dialog(
@@ -222,7 +279,7 @@ fn write_with_dialog(
 ) -> Result<String, String> {
     use tauri_plugin_dialog::DialogExt;
 
-    let settings = Settings::load(&state.settings_path);
+    let mut settings = Settings::load(&state.settings_path);
     let ext = &settings.audio_format;
     // Truncate on char boundaries so multi-byte names can't panic.
     let stem: String = default_name.chars().take(60).collect();
@@ -233,14 +290,24 @@ fn write_with_dialog(
         .add_filter("Audio", &[ext.as_str()])
         .set_file_name(format!("{stem}.{ext}"));
 
-    if let Some(dir) = &settings.default_directory {
-        dialog = dialog.set_directory(Path::new(dir));
+    if let Some(dir) = dialog_start_dir(app, &settings) {
+        dialog = dialog.set_directory(dir);
     }
 
     match dialog.blocking_save_file() {
         Some(p) => {
             let p = p.as_path().unwrap();
             std::fs::write(p, data).map_err(|e| format!("Write failed: {e}"))?;
+            // Remember where the user actually saved so the next dialog — and
+            // the path Settings shows — starts there.
+            if let Some(parent) = p.parent() {
+                let parent = parent.to_string_lossy().into_owned();
+                if settings.last_save_directory.as_deref() != Some(parent.as_str()) {
+                    settings.last_save_directory = Some(parent);
+                    // Best-effort: failing to record this must not fail the save.
+                    let _ = settings.save(&state.settings_path);
+                }
+            }
             Ok(p.to_string_lossy().to_string())
         }
         None => Err("Cancelled".into()),
