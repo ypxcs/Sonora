@@ -35,12 +35,34 @@ fn collect_voices(voices_path: &Path) -> Vec<String> {
     voices
 }
 
+/// One-time move from the pre-rebrand identifier's data directory. Renames
+/// the whole folder so settings and history come along.
+fn migrate_legacy_data(app: &tauri::AppHandle) -> Result<(), String> {
+    let data_dir = app.path().data_dir().map_err(|e| e.to_string())?;
+    let new_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let old_dir = data_dir.join("com.ymac.sonora");
+
+    if old_dir == new_dir || !old_dir.exists() || new_dir.exists() {
+        return Ok(());
+    }
+    if let Some(parent) = new_dir.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::rename(&old_dir, &new_dir)
+        .map_err(|e| format!("could not move {:?} to {:?}: {e}", old_dir, new_dir))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            // Move data from the pre-rebrand identifier before any path is used.
+            if let Err(e) = migrate_legacy_data(app.handle()) {
+                eprintln!("Legacy data migration failed: {e}");
+            }
+
             let resource_dir = app.path().resource_dir()?;
             let model_path = resolve_resource(&resource_dir, "model.onnx");
             let voices_path = resolve_resource(&resource_dir, "voices");

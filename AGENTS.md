@@ -79,7 +79,7 @@ With `Overlay`, the native title-bar drag is gone, so the window is dragged via 
 
 Dropping a `.txt` onto the textarea uses the webview's HTML5 drag-and-drop, which requires `"dragDropEnabled": false` on the window — with Tauri's native drop handler enabled (the default) the `drop`/`dataTransfer.files` events never reach the frontend.
 
-**Identifier = data directory.** `tauri.conf.json > identifier` (`com.ymac.sonora`) is the sole input to `app_data_dir()`, so history and `settings.json` live at `~/Library/Application Support/com.ymac.sonora/` on macOS and `~/.local/share/com.ymac.sonora/` on Linux (shown in Settings → About). Changing the identifier silently orphans that data (and on macOS also re-scopes the code-signing identity), so treat it as frozen once anything ships.
+**Identifier = data directory.** `tauri.conf.json > identifier` (`com.ypxcs.sonora`) is the sole input to `app_data_dir()`, so history and `settings.json` live at `~/Library/Application Support/com.ypxcs.sonora/` on macOS and `~/.local/share/com.ypxcs.sonora/` on Linux (shown in Settings → About). On first launch, `migrate_legacy_data` renames the pre-rebrand `com.ymac.sonora` folder into place, so existing settings/history carry over. Changing the identifier again would orphan that data (and on macOS re-scope the code-signing identity), so treat it as frozen once anything ships.
 
 ```
 ┌──────────────────────────────────────────────────────┐

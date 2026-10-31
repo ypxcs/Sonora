@@ -2,7 +2,7 @@
 name = "sonora"
 version = "0.2.0"
 description = "Native, fully offline text-to-speech desktop app powered by the Kokoro-82M model."
-authors = ["ymac"]
+authors = ["ypxcs"]
 license = "MIT"
 edition = "2021"
 
